@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>p5.js 分形图 - 递归树</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      background: #0a0a0a;
+      overflow: hidden;
+    }
+    canvas {
+      display: block;
+    }
+    input[type=range] {
+      accent-color: #00d4ff;
+    }
+  </style>
+</head>
+<body>
+  <script>
+    let angle = 0;
+    let angleSlider;
+    let currentScheme = 0;
+    
+    const seasons = [
+      { name: '春', hueStart: 340, hueEnd: 360, bgHue: 350, bgSat: 20, bgBri: 10 },
+      { name: '夏', hueStart: 80, hueEnd: 150, bgHue: 120, bgSat: 25, bgBri: 8 },
+      { name: '秋', hueStart: 20, hueEnd: 60, bgHue: 30, bgSat: 25, bgBri: 12 },
+      { name: '冬', hueStart: 180, hueEnd: 240, bgHue: 210, bgSat: 20, bgBri: 6 }
+    ];
+    
+    let seasonButtons = [];
+    
+    function setup() {
+      createCanvas(windowWidth, windowHeight);
+      colorMode(HSB, 360, 100, 100, 1);
+      angle = PI / 6;
+      
+      angleSlider = createSlider(PI/12, PI/2, PI/6, 0.01);
+      angleSlider.position(20, 70);
+      angleSlider.style('width', '150px');
+      
+      createButtons();
+    }
+    
+    function createButtons() {
+      let btnY = 120;
+      seasons.forEach((season, i) => {
+        let btn = createButton(season.name);
+        btn.position(20, btnY + i * 35);
+        btn.style('width', '60px');
+        btn.style('height', '28px');
+        btn.style('border', 'none');
+        btn.style('border-radius', '4px');
+        btn.style('cursor', 'pointer');
+        btn.style('font-size', '14px');
+        btn.style('font-weight', 'bold');
+        btn.style('transition', 'all 0.2s');
+        updateButtonStyle(btn, i);
+        
+        btn.mousePressed(() => {
+          currentScheme = i;
+          seasonButtons.forEach((b, j) => {
+            updateButtonStyle(b, j);
+          });
+        });
+        
+        seasonButtons.push(btn);
+      });
+    }
+    
+    function updateButtonStyle(btn, index) {
+      if (index === currentScheme) {
+        btn.style('background', '#00d4ff');
+        btn.style('color', '#000');
+      } else {
+        btn.style('background', '#333');
+        btn.style('color', '#fff');
+      }
+    }
+    
+    function draw() {
+      let scheme = seasons[currentScheme];
+      background(scheme.bgHue, scheme.bgSat, scheme.bgBri, 0.15);
+      
+      translate(width / 2, height);
+      
+      let len = height * 0.25;
+      let branchAngle = angleSlider.value();
+      
+      strokeWeight(2);
+      branch(len, branchAngle, 0);
+      
+      displayInfo(branchAngle);
+    }
+    
+    function branch(len, angleOffset, depth) {
+      let scheme = seasons[currentScheme];
+      let hue = map(depth, 0, 12, scheme.hueStart, scheme.hueEnd);
+      stroke(hue, 80, 90, map(len, 0, height*0.25, 0.3, 1));
+      strokeWeight(map(len, 0, height*0.25, 0.5, 4));
+      
+      line(0, 0, 0, -len);
+      translate(0, -len);
+      
+      if (len > 10) {
+        push();
+        rotate(angleOffset + sin(frameCount * 0.01 + depth) * 0.1);
+        branch(len * 0.67, angleOffset, depth + 1);
+        pop();
+        
+        push();
+        rotate(-angleOffset + cos(frameCount * 0.01 + depth) * 0.1);
+        branch(len * 0.67, angleOffset, depth + 1);
+        pop();
+      }
+    }
+    
+    function displayInfo(branchAngle) {
+      resetMatrix();
+      fill(0, 0, 100);
+      noStroke();
+      textSize(14);
+      textAlign(LEFT, TOP);
+      text('分形树 - 递归算法', 20, 20);
+      text('分支角度: ' + branchAngle.toFixed(2), 20, 45);
+    }
+    
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight);
+    }
+  </script>
+</body>
+</html>
