@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Leaders and Followers - 领导者与追随者</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      background: #222;
+      overflow: hidden;
+    }
+  </style>
+</head>
+<body>
+  <script>
+    let leaders = [];
+    let followers = [];
+
+    function setup() {
+      createCanvas(600, 600);
+      
+      for (let i = 0; i < 30; i++) {
+        leaders.push(new Leader());
+      }
+
+      for (let i = 0; i < 1600; i++) {
+        followers.push(new Follower());
+      }
+    }
+
+    function draw() {
+      background(0);
+
+      calculateFollowerWeights();
+      updateLeaderAbilities();
+      eliminateWeakLeaders();
+      updateLeaders();
+      updateFollowers();
+      drawLeadersAndFollowers();
+      
+      displayInfo();
+    }
+
+    function keyPressed() {
+      setup();
+    }
+
+    function mouseClicked() {
+      setup();
+    }
+
+    function wrapDistance(x1, y1, x2, y2) {
+      let x = min(abs(x1-x2), abs((x1-width)-x2), abs(x1-(x2-width)));
+      let y = min(abs(y1-y2), abs((y1-height)-y2), abs(y1-(y2-height)));
+      return sqrt(x*x + y*y);
+    }
+
+    function wrapATan2(x1, y1, x2, y2) {
+      if (abs(x1-x2) > width/2) {
+        if (x1 > x2) {
+          x1 -= width;
+        } else {
+          x2 -= width;
+        }
+      } 
+      if (abs(y1-y2) > height/2) {
+        if (y1 > y2) {
+          y1 -= height;
+        } else {
+          y2 -= height;
+        }
+      } 
+      return atan2(y1-y2, x1-x2);
+    }
+
+    function calculateFollowerWeights() {
+      for (let F of followers) {
+        let minDist = width * 3;
+        let weights = [];
+        let totalWeight = 0;
+
+        for (let i = 0; i < leaders.length; i++) {
+          let L = leaders[i];
+          let d = wrapDistance(F.pos.x, F.pos.y, L.pos.x, L.pos.y);
+          let w = 1 / (d * d + 1);
+          weights.push(w);
+          totalWeight += w;
+        }
+
+        F.leaderIndex = 0;
+        F.weight = 0;
+        
+        if (leaders.length > 0) {
+          let maxWeight = 0;
+          for (let i = 0; i < leaders.length; i++) {
+            let normalizedWeight = weights[i] / totalWeight;
+            if (normalizedWeight > maxWeight) {
+              maxWeight = normalizedWeight;
+              F.leaderIndex = i;
+              F.weight = normalizedWeight;
+            }
+          }
+        }
+      }
+    }
+
+    function updateLeaderAbilities() {
+      for (let L of leaders) {
+        L.followerCount = 0;
+        L.totalWeight = 0;
+      }
+
+      for (let F of followers) {
+        if (F.leaderIndex >= 0 && F.leaderIndex < leaders.length) {
+          let L = leaders[F.leaderIndex];
+          L.followerCount++;
+          L.totalWeight += F.weight;
+        }
+      }
+
+      for (let L of leaders) {
+        L.ability = L.followerCount * (1 + L.totalWeight);
+      }
+    }
+
+    function eliminateWeakLeaders() {
+      let toRemove = [];
+      
+      for (let i = 0; i < leaders.length; i++) {
+        for (let j = i + 1; j < leaders.length; j++) {
+          let L1 = leaders[i];
+          let L2 = leaders[j];
+          let d = wrapDistance(L1.pos.x, L1.pos.y, L2.pos.x, L2.pos.y);
+          
+          if (d < 15) {
+            if (L1.ability > L2.ability * 3 && L1.followerCount > 50) {
+              toRemove.push(j);
+            } else if (L2.ability > L1.ability * 3 && L2.followerCount > 50) {
+              toRemove.push(i);
+              break;
+            }
+          }
+        }
+      }
+
+      toRemove = [...new Set(toRemove)].sort((a, b) => b - a);
+      for (let idx of toRemove) {
+        leaders.splice(idx, 1);
+      }
+
+      if (leaders.length < 5) {
+        for (let i = 0; i < 25 - leaders.length; i++) {
+          leaders.push(new Leader());
+        }
+      }
+    }
+
+    function updateLeaders() {
+      for (let i = 0; i < leaders.length; i++) {
+        let L = leaders[i];
+        let mindistance = width * 3;
+        let minindex = 0;
+
+        for (let j = 0; j < leaders.length; j++) {
+          if (i !== j) {
+            let T = leaders[j];
+            let d = wrapDistance(T.pos.x, T.pos.y, L.pos.x, L.pos.y);
+
+            if (d < mindistance) {
+              mindistance = d;
+              minindex = j;
+            }
+          }
+        }
+        
+        if (leaders.length > 1) {
+          let weight = map(mindistance, 0, width*sqrt(2), 1, 0);
+          let T = leaders[minindex];
+          let angleToClosest = wrapATan2(L.pos.x, L.pos.y, T.pos.x, T.pos.y) + PI;
+          let newAngle = (angleToClosest*weight + T.angle*(1-weight)) % TWO_PI;
+          T.angle = newAngle;
+        }
+      }
+    }
+
+    function updateFollowers() {
+      avoidOverlap();
+      
+      for (let F of followers) {
+        if (F.leaderIndex >= 0 && F.leaderIndex < leaders.length) {
+          let L = leaders[F.leaderIndex];
+          let angleToClosest = wrapATan2(L.pos.x, L.pos.y, F.pos.x, F.pos.y);
+          let newAngle = (angleToClosest * 0.3 + F.angle * 0.7) % TWO_PI;
+          F.angle = newAngle;
+        }
+        
+        F.move();
+      }
+    }
+    
+    function avoidOverlap() {
+      let cellSize = 10;
+      let gridCols = ceil(width / cellSize);
+      let gridRows = ceil(height / cellSize);
+      let grid = [];
+      
+      for (let i = 0; i < gridCols * gridRows; i++) {
+        grid[i] = [];
+      }
+      
+      for (let F of followers) {
+        let col = floor(F.pos.x / cellSize);
+        let row = floor(F.pos.y / cellSize);
+        if (col >= 0 && col < gridCols && row >= 0 && row < gridRows) {
+          grid[row * gridCols + col].push(F);
+        }
+      }
+      
+      for (let F of followers) {
+        let col = floor(F.pos.x / cellSize);
+        let row = floor(F.pos.y / cellSize);
+        
+        let pushX = 0;
+        let pushY = 0;
+        
+        for (let dy = -2; dy <= 2; dy++) {
+          for (let dx = -2; dx <= 2; dx++) {
+            let nc = col + dx;
+            let nr = row + dy;
+            
+            if (nc >= 0 && nc < gridCols && nr >= 0 && nr < gridRows) {
+              let cell = grid[nr * gridCols + nc];
+              for (let other of cell) {
+                if (other !== F) {
+                  let d = wrapDistance(F.pos.x, F.pos.y, other.pos.x, other.pos.y);
+                  if (d < 6 && d > 0) {
+                    let pushStrength = (6 - d) * 0.5;
+                    pushX += (F.pos.x - other.pos.x) / d * pushStrength;
+                    pushY += (F.pos.y - other.pos.y) / d * pushStrength;
+                  }
+                }
+              }
+            }
+          }
+        }
+        
+        F.pos.x += pushX;
+        F.pos.y += pushY;
+        
+        if (F.pos.x < 0) F.pos.x += width;
+        if (F.pos.x > width) F.pos.x -= width;
+        if (F.pos.y < 0) F.pos.y += height;
+        if (F.pos.y > height) F.pos.y -= height;
+      }
+    }
+
+    function drawLeadersAndFollowers() {
+      for (let L of leaders) {
+        L.move();
+        L.display();
+      }
+
+      for (let F of followers) {
+        F.display();
+      }
+    }
+
+    function displayInfo() {
+      fill(255);
+      noStroke();
+      textSize(12);
+      textAlign(LEFT, TOP);
+      text(`领导者: ${leaders.length}`, 10, 10);
+      text(`追随者: ${followers.length}`, 10, 25);
+      
+      let maxAbility = 0;
+      let strongestIdx = 0;
+      for (let i = 0; i < leaders.length; i++) {
+        if (leaders[i].ability > maxAbility) {
+          maxAbility = leaders[i].ability;
+          strongestIdx = i;
+        }
+      }
+      if (leaders.length > 0) {
+        text(`最强领导者能力: ${maxAbility.toFixed(1)}`, 10, 40);
+      }
+    }
+
+    class Leader {
+      constructor() {
+        this.pos = createVector(random(width), random(height));
+        this.speed = 0.5;
+        this.angle = random(TWO_PI);
+        this.followerCount = 0;
+        this.totalWeight = 0;
+        this.ability = 0;
+      }
+
+      move() {
+        this.pos.x += this.speed * cos(this.angle);
+        this.pos.y += this.speed * sin(this.angle);
+        this.angle += random(0.1) - 0.05;
+
+        if (this.pos.x < 0) {
+          this.pos.x = width;
+        } else if (this.pos.x > width) {
+          this.pos.x = 0;
+        }
+        if (this.pos.y < 0) {
+          this.pos.y = height;
+        } else if (this.pos.y > height) {
+          this.pos.y = 0;
+        }
+
+        this.angle += random(0.1) - 0.05;
+      }
+
+      display() {
+        let brightness = map(this.ability, 0, 300, 150, 255);
+        fill(0, 200, brightness);
+        noStroke();
+        let size = constrain(map(this.ability, 0, 300, 6, 14), 6, 14);
+        ellipse(this.pos.x, this.pos.y, size, size);
+        
+        if (size > 8) {
+          fill(255);
+          textSize(7);
+          textAlign(CENTER, CENTER);
+          text(Math.floor(this.ability), this.pos.x, this.pos.y);
+        }
+      }
+    }
+
+    class Follower {
+      constructor() {
+        this.pos = createVector(random(width), random(height));
+        this.speed = 0.15;
+        this.angle = random(TWO_PI);
+        this.leaderIndex = 0;
+        this.weight = 0;
+      }
+
+      move() {
+        this.pos.x += this.speed * cos(this.angle);
+        this.pos.y += this.speed * sin(this.angle);
+
+        if (this.pos.x < 0) {
+          this.pos.x = width;
+        } else if (this.pos.x > width) {
+          this.pos.x = 0;
+        }
+        if (this.pos.y < 0) {
+          this.pos.y = height;
+        } else if (this.pos.y > height) {
+          this.pos.y = 0;
+        }
+      }
+
+      display() {
+        let alpha = map(this.weight, 0, 0.5, 30, 150);
+        fill(255, 180, 0, alpha);
+        noStroke();
+        ellipse(this.pos.x, this.pos.y, 2.5, 2.5);
+      }
+    }
+  </script>
+</body>
+</html>
